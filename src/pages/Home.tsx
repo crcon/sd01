@@ -904,6 +904,7 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 2. 现货交易 ==================== */}
             {activeSection === 'spot' && (
+              <div className="space-y-5">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
@@ -963,6 +964,105 @@ export default function ShandongStorageCalculator() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* —— 数据实时展示舱（科技绿 · 海报风） —— */}
+              <section className="relative overflow-hidden rounded-[28px] border border-emerald-400/15 bg-[linear-gradient(135deg,_#03140d_0%,_#062b1f_45%,_#03140d_100%)] p-6 md:p-10 shadow-[0_24px_80px_rgba(5,46,33,0.45)]">
+                <div className="pointer-events-none absolute inset-0 opacity-60">
+                  <div className="absolute -left-20 top-10 h-64 w-64 rounded-full bg-emerald-400/15 blur-[100px]"></div>
+                  <div className="absolute right-0 bottom-0 h-72 w-72 rounded-full bg-teal-300/10 blur-[120px]"></div>
+                  <div className="absolute inset-0 bg-[linear-gradient(rgba(16,185,129,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(16,185,129,0.06)_1px,transparent_1px)] bg-[size:48px_48px]"></div>
+                  <div className="absolute inset-x-10 top-24 h-px bg-gradient-to-r from-transparent via-emerald-300/40 to-transparent"></div>
+                </div>
+
+                <div className="relative flex flex-col gap-3 md:flex-row md:items-end md:justify-between mb-8">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-emerald-300/80">REAL-TIME DATA HUB</p>
+                    <h3 className="mt-2 text-2xl md:text-3xl font-bold text-white tracking-wide">数据实时展示舱 <span className="text-emerald-300">// 现货运行</span></h3>
+                    <p className="mt-2 max-w-xl text-sm text-emerald-100/70">基于当前参数实时演算的核心运行指标，可直接作为路演 / 海报展示。</p>
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-400/10 px-4 py-2 text-xs text-emerald-100 backdrop-blur-sm">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-70"></span>
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,0.9)]"></span>
+                    </span>
+                    LIVE · {new Date().toLocaleTimeString('zh-CN', { hour12: false })}
+                  </div>
+                </div>
+
+                <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-5">
+                  {[
+                    {
+                      key: 'revenue',
+                      label: '首年收益',
+                      sub: 'First-Year Revenue',
+                      value: formatNumber(firstYearRevenue),
+                      unit: '万元',
+                      hint: `综合 ${revenueStructure.length} 条收益流`,
+                    },
+                    {
+                      key: 'discharge',
+                      label: '首年放电量',
+                      sub: 'Annual Discharge',
+                      value: formatNumber(annualDischargeMWh),
+                      unit: 'MWh',
+                      hint: `≈ ${formatNumber(annualDischargeMWh / 10)} 万kWh`,
+                    },
+                    {
+                      key: 'cycles',
+                      label: '调用次数',
+                      sub: 'Yearly Cycles',
+                      value: formatNumber(params.cyclesPerDay * params.runDays),
+                      unit: '次/年',
+                      hint: `${params.cyclesPerDay} 次/天 × ${params.runDays} 天`,
+                    },
+                    {
+                      key: 'duration',
+                      label: '调用时长',
+                      sub: 'Active Duration',
+                      value: formatNumber(params.cyclesPerDay * params.runDays * params.systemDuration),
+                      unit: 'h/年',
+                      hint: `单次 ${params.systemDuration} h`,
+                    },
+                  ].map((it, idx) => (
+                    <div
+                      key={it.key}
+                      className="group relative overflow-hidden rounded-2xl border border-emerald-300/15 bg-[linear-gradient(160deg,rgba(6,78,59,0.55)_0%,rgba(2,20,14,0.85)_100%)] p-5 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-emerald-300/40 hover:shadow-[0_18px_60px_rgba(16,185,129,0.25)]"
+                    >
+                      <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-emerald-300 to-transparent opacity-70"></div>
+                      <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-emerald-400/10 blur-2xl transition-opacity duration-300 group-hover:opacity-80"></div>
+                      <div className="absolute right-3 top-3 font-mono text-[10px] tracking-widest text-emerald-300/60">0{idx + 1}</div>
+
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-emerald-300/70">{it.sub}</p>
+                      <p className="mt-1 text-sm font-medium text-emerald-50">{it.label}</p>
+
+                      <div className="mt-5 flex items-baseline gap-2">
+                        <span className="text-[2.4rem] font-bold leading-none tracking-tight bg-gradient-to-br from-white via-emerald-100 to-emerald-300 bg-clip-text text-transparent">
+                          {it.value}
+                        </span>
+                        <span className="text-xs text-emerald-200/70">{it.unit}</span>
+                      </div>
+
+                      <div className="mt-5 flex items-center justify-between text-[11px] text-emerald-200/60">
+                        <span className="font-mono">{it.hint}</span>
+                        <span className="inline-flex items-center gap-1 text-emerald-300">
+                          <span className="h-1 w-1 rounded-full bg-emerald-300 shadow-[0_0_6px_rgba(110,231,183,0.9)]"></span>
+                          ONLINE
+                        </span>
+                      </div>
+
+                      <div className="mt-4 h-1 rounded-full bg-emerald-900/40 overflow-hidden">
+                        <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-200 group-hover:w-full transition-all duration-700"></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="relative mt-6 flex flex-wrap items-center justify-between gap-3 text-[11px] text-emerald-200/50 font-mono">
+                  <span>// SOURCE: spot-market-engine v2.6 · 实时演算</span>
+                  <span>SYS: 容量 {formatNumber(params.capacityMWh)} MWh · 时长 {params.systemDuration} h · 综合效率 {(params.efficiency*100).toFixed(1)}% · DOD {(params.dodDepth*100).toFixed(1)}%</span>
+                </div>
+              </section>
               </div>
             )}
 
