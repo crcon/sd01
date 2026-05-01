@@ -360,7 +360,7 @@ export default function ShandongStorageCalculator() {
         backgroundColor: '#f9fafb',
         windowWidth: element.scrollWidth,
         windowHeight: element.scrollHeight,
-        // 在克隆的 DOM 上去除 html2canvas 不支持的样式（backdrop-filter / 复杂渐变 / oklch 等）
+        // 在克隆的 DOM 上去除 html2canvas 不支持的样式（backdrop-filter / 渐变 / 滤镜 / oklch 等）
         onclone: (doc) => {
           const root = doc.getElementById('main-report-content');
           if (!root) return;
@@ -368,15 +368,19 @@ export default function ShandongStorageCalculator() {
           all.forEach(el => {
             const cs = doc.defaultView?.getComputedStyle(el);
             if (!cs) return;
-            // 1) 去掉 backdrop-filter
+            // 1) 去掉 backdrop-filter / filter（blur 等 html2canvas 不支持）
             el.style.backdropFilter = 'none';
             (el.style as any).webkitBackdropFilter = 'none';
-            // 2) 复杂的多重渐变 / 不可解析颜色 → 退化为纯色背景
-            const bg = cs.backgroundImage;
-            if (bg && bg !== 'none' && (bg.includes('radial-gradient') || bg.includes('conic-gradient') || /oklch|lab\(|lch\(|color\(/.test(bg))) {
+            if (cs.filter && cs.filter !== 'none') el.style.filter = 'none';
+            // 2) 任意 background-image（含 linear/radial/conic-gradient、url）一律清空
+            //    避免 html2canvas 调用 createPattern 时遇到 0 尺寸图像报错
+            if (cs.backgroundImage && cs.backgroundImage !== 'none') {
               el.style.backgroundImage = 'none';
-              if (!cs.backgroundColor || cs.backgroundColor === 'rgba(0, 0, 0, 0)') {
-                el.style.backgroundColor = '#0f172a';
+              const isTransparent = !cs.backgroundColor || cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent';
+              if (isTransparent) {
+                // 深色主题（科技舱）→ 深色兜底；其余 → 透明
+                const isDark = (el.closest('section')?.className || '').includes('bg-[radial-gradient') || /text-white|text-slate-(50|100|200|300)/.test(el.className);
+                el.style.backgroundColor = isDark ? '#0f172a' : 'transparent';
               }
             }
             // 3) 兜底：替换不支持的现代颜色函数
