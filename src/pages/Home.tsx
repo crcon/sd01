@@ -345,12 +345,51 @@ export default function ShandongStorageCalculator() {
     try {
       const element = document.getElementById('main-report-content');
       if (!element) { showNotification('error', '未找到报告区域'); return; }
+
+      // 等一帧，确保图表/字体已经渲染完成
+      await new Promise(r => requestAnimationFrame(() => r(null)));
+      if ((document as any).fonts?.ready) {
+        try { await (document as any).fonts.ready; } catch {}
+      }
+
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: Math.min(window.devicePixelRatio || 1, 2),
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#f9fafb',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+        // 在克隆的 DOM 上去除 html2canvas 不支持的样式（backdrop-filter / 复杂渐变 / oklch 等）
+        onclone: (doc) => {
+          const root = doc.getElementById('main-report-content');
+          if (!root) return;
+          const all = root.querySelectorAll<HTMLElement>('*');
+          all.forEach(el => {
+            const cs = doc.defaultView?.getComputedStyle(el);
+            if (!cs) return;
+            // 1) 去掉 backdrop-filter
+            el.style.backdropFilter = 'none';
+            (el.style as any).webkitBackdropFilter = 'none';
+            // 2) 复杂的多重渐变 / 不可解析颜色 → 退化为纯色背景
+            const bg = cs.backgroundImage;
+            if (bg && bg !== 'none' && (bg.includes('radial-gradient') || bg.includes('conic-gradient') || /oklch|lab\(|lch\(|color\(/.test(bg))) {
+              el.style.backgroundImage = 'none';
+              if (!cs.backgroundColor || cs.backgroundColor === 'rgba(0, 0, 0, 0)') {
+                el.style.backgroundColor = '#0f172a';
+              }
+            }
+            // 3) 兜底：替换不支持的现代颜色函数
+            (['color','backgroundColor','borderColor'] as const).forEach(k => {
+              const v = (cs as any)[k] as string;
+              if (v && /oklch|lab\(|lch\(|color\(/.test(v)) {
+                (el.style as any)[k] = k === 'color' ? '#0f172a' : '#ffffff';
+              }
+            });
+          });
+        },
       });
+
       const imgData = canvas.toDataURL('image/jpeg', 0.92);
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageW = pdf.internal.pageSize.getWidth();
@@ -369,8 +408,10 @@ export default function ShandongStorageCalculator() {
       const dateStr = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
       pdf.save(`山东储能测算报告_${dateStr}.pdf`);
       showNotification('success', 'PDF 报告已导出！');
-    } catch {
-      showNotification('error', '导出失败，请重试');
+    } catch (err) {
+      console.error('[ExportPDF] 失败：', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      showNotification('error', `导出失败：${msg.slice(0, 60)}`);
     } finally {
       setIsExporting(false);
     }
@@ -743,7 +784,7 @@ export default function ShandongStorageCalculator() {
                     </div>
                   </div>
 
-                  <div className="relative grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-start">
+                  <div className="relative grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-stretch">
                     <div className="lg:col-span-6 space-y-5">
                       <div className="mx-auto grid w-full max-w-[560px] grid-cols-4 gap-3">
                         {revenueStructure.map(item => (
@@ -807,7 +848,7 @@ export default function ShandongStorageCalculator() {
                       </div>
                     </div>
 
-                    <div className="lg:col-span-6 grid grid-cols-1 content-start gap-x-5 gap-y-7 md:grid-cols-2 lg:pt-28">
+                    <div className="lg:col-span-6 grid grid-cols-1 gap-x-5 gap-y-6 md:grid-cols-2 md:auto-rows-fr lg:h-full">
                       {revenueStructure.map(item => (
                         <div
                           key={item.label}
@@ -859,7 +900,7 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 2. 现货交易 ==================== */}
             {activeSection === 'spot' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                     <Zap size={16} className="text-blue-600" />
@@ -883,22 +924,22 @@ export default function ShandongStorageCalculator() {
                     </div>
                   </div>
                 </div>
-                <div className="lg:col-span-7 space-y-4">
+                <div className="lg:col-span-7 space-y-3">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">理论年放电量</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">{formatNumber(annualDischargeMWh)} <span className="text-sm font-normal text-gray-500">MWh</span></p>
+                      <p className="text-xl font-bold text-gray-900 mt-1">{formatNumber(annualDischargeMWh)} <span className="text-sm font-normal text-gray-500">MWh</span></p>
                       <p className="text-xs text-gray-400 mt-1">≈ {formatNumber(annualDischargeMWh / 10)} 万kWh</p>
                     </div>
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">首年现货收入(修正后)</p>
-                      <p className="text-2xl font-bold text-blue-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.spot)} <span className="text-sm font-normal text-gray-500">万元</span></p>
+                      <p className="text-xl font-bold text-blue-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.spot)} <span className="text-sm font-normal text-gray-500">万元</span></p>
                       <p className="text-xs text-gray-400 mt-1">占总收入 {((results.yearlyData[0].breakdown.spot / results.yearlyData[0].revenue)*100).toFixed(1)}%</p>
                     </div>
                   </div>
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-base font-bold text-gray-800 mb-4">逐年现货收入 (含衰减)</h3>
-                    <div className="h-[280px] w-full">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-800 mb-3">逐年现货收入 (含衰减)</h3>
+                    <div className="h-[220px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={results.yearlyData}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -923,7 +964,7 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 3. 调频收益 ==================== */}
             {activeSection === 'frequency' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                     <Gauge size={16} className="text-orange-600" />
@@ -936,21 +977,21 @@ export default function ShandongStorageCalculator() {
                     </div>
                   </div>
                 </div>
-                <div className="lg:col-span-7 space-y-4">
+                <div className="lg:col-span-7 space-y-3">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">首年调频收入</p>
-                      <p className="text-2xl font-bold text-orange-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.aux)} <span className="text-sm font-normal text-gray-500">万元</span></p>
+                      <p className="text-xl font-bold text-orange-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.aux)} <span className="text-sm font-normal text-gray-500">万元</span></p>
                       <p className="text-xs text-gray-400 mt-1">占总收入 {((results.yearlyData[0].breakdown.aux / results.yearlyData[0].revenue)*100).toFixed(1)}%</p>
                     </div>
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">全周期调频累计</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">{formatNumber(results.yearlyData.reduce((a,b)=>a+b.breakdown.aux,0))} <span className="text-sm font-normal text-gray-500">万元</span></p>
+                      <p className="text-xl font-bold text-gray-900 mt-1">{formatNumber(results.yearlyData.reduce((a,b)=>a+b.breakdown.aux,0))} <span className="text-sm font-normal text-gray-500">万元</span></p>
                     </div>
                   </div>
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-base font-bold text-gray-800 mb-4">逐年调频收入</h3>
-                    <div className="h-[280px] w-full">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-800 mb-3">逐年调频收入</h3>
+                    <div className="h-[220px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={results.yearlyData}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -968,7 +1009,7 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 4. 容量电价 ==================== */}
             {activeSection === 'capacity' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                     <Battery size={16} className="text-purple-600" />
@@ -989,22 +1030,22 @@ export default function ShandongStorageCalculator() {
                     </div>
                   </div>
                 </div>
-                <div className="lg:col-span-7 space-y-4">
+                <div className="lg:col-span-7 space-y-3">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">首年容量补偿</p>
-                      <p className="text-2xl font-bold text-purple-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.comp)} <span className="text-sm font-normal text-gray-500">万元</span></p>
+                      <p className="text-xl font-bold text-purple-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.comp)} <span className="text-sm font-normal text-gray-500">万元</span></p>
                       <p className="text-xs text-gray-400 mt-1">占总收入 {((results.yearlyData[0].breakdown.comp / results.yearlyData[0].revenue)*100).toFixed(1)}%</p>
                     </div>
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">可用容量</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">{(params.capacityMW * params.kFactor / 24).toFixed(2)} <span className="text-sm font-normal text-gray-500">MW</span></p>
+                      <p className="text-xl font-bold text-gray-900 mt-1">{(params.capacityMW * params.kFactor / 24).toFixed(2)} <span className="text-sm font-normal text-gray-500">MW</span></p>
                       <p className="text-xs text-gray-400 mt-1">基于核定 {params.kFactor}h 放电</p>
                     </div>
                   </div>
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-base font-bold text-gray-800 mb-4">逐年容量补偿</h3>
-                    <div className="h-[280px] w-full">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-800 mb-3">逐年容量补偿</h3>
+                    <div className="h-[220px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={results.yearlyData}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -1022,7 +1063,7 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 5. 容量租赁 ==================== */}
             {activeSection === 'lease' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                 <div className="lg:col-span-5 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                     <Building2 size={16} className="text-green-600" />
@@ -1038,22 +1079,22 @@ export default function ShandongStorageCalculator() {
                     </div>
                   </div>
                 </div>
-                <div className="lg:col-span-7 space-y-4">
+                <div className="lg:col-span-7 space-y-3">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">首年租赁收入</p>
-                      <p className="text-2xl font-bold text-green-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.lease)} <span className="text-sm font-normal text-gray-500">万元</span></p>
+                      <p className="text-xl font-bold text-green-600 mt-1">{formatNumber(results.yearlyData[0].breakdown.lease)} <span className="text-sm font-normal text-gray-500">万元</span></p>
                       <p className="text-xs text-gray-400 mt-1">占总收入 {((results.yearlyData[0].breakdown.lease / results.yearlyData[0].revenue)*100).toFixed(1)}%</p>
                     </div>
-                    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                    <div className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-100">
                       <p className="text-xs text-gray-500">出租容量</p>
-                      <p className="text-2xl font-bold text-gray-900 mt-1">{(params.capacityMW * params.leaseRatio / 100).toFixed(2)} <span className="text-sm font-normal text-gray-500">MW</span></p>
+                      <p className="text-xl font-bold text-gray-900 mt-1">{(params.capacityMW * params.leaseRatio / 100).toFixed(2)} <span className="text-sm font-normal text-gray-500">MW</span></p>
                       <p className="text-xs text-gray-400 mt-1">出租率 {params.leaseRatio}%</p>
                     </div>
                   </div>
-                  <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-base font-bold text-gray-800 mb-4">逐年租赁收入</h3>
-                    <div className="h-[280px] w-full">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-bold text-gray-800 mb-3">逐年租赁收入</h3>
+                    <div className="h-[220px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={results.yearlyData}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
@@ -1071,7 +1112,7 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 6. 市场规则 ==================== */}
             {activeSection === 'rules' && (
-              <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 space-y-6">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-6">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><BookOpen size={18} className="text-blue-600"/>山东电力现货 / 辅助服务市场规则摘要</h3>
                 <ul className="space-y-3 text-sm text-gray-700 list-disc pl-5">
                   <li><strong>交易品种：</strong>日前现货、实时现货、二次调频(AGC)、备用、调峰等。</li>
@@ -1086,7 +1127,7 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 7. 相关政策 ==================== */}
             {activeSection === 'policy' && (
-              <div className="bg-white p-8 rounded-xl shadow-sm border border-gray-100 space-y-6">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-6">
                 <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><ScrollText size={18} className="text-blue-600"/>相关政策梳理</h3>
                 <div className="space-y-5 text-sm text-gray-700">
                   <div>
@@ -1119,8 +1160,8 @@ export default function ShandongStorageCalculator() {
 
             {/* ==================== 8. 基础数据 ==================== */}
             {activeSection === 'basics' && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div className="lg:col-span-6 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                <div className="lg:col-span-6 space-y-4">
                   <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                       <Settings size={16} className="text-blue-600" />
@@ -1181,7 +1222,7 @@ export default function ShandongStorageCalculator() {
                   </div>
                 </div>
 
-                <div className="lg:col-span-6 space-y-6">
+                <div className="lg:col-span-6 space-y-4">
                   <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                     <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
                       <DollarSign size={16} className="text-purple-600" />
