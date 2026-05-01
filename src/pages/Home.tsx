@@ -994,11 +994,11 @@ export default function ShandongStorageCalculator() {
                   {[
                     {
                       key: 'revenue',
-                      label: '首年收益',
-                      sub: 'First-Year Revenue',
-                      value: formatNumber(firstYearRevenue),
+                      label: '首年现货收益',
+                      sub: 'First-Year Spot Revenue',
+                      value: formatNumber(results.yearlyData[0].breakdown.spot),
                       unit: '万元',
-                      hint: `综合 ${revenueStructure.length} 条收益流`,
+                      hint: `占总收入 ${((results.yearlyData[0].breakdown.spot / results.yearlyData[0].revenue)*100).toFixed(1)}%`,
                     },
                     {
                       key: 'discharge',
